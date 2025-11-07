@@ -1,4 +1,4 @@
-# Video Overlay API - Backend (FastAPI + FFmpeg)
+# Buttercut.ai API - Backend (FastAPI + FFmpeg)
 
 A production-ready FastAPI backend for processing videos with text, image, and video clip overlays using FFmpeg. This backend receives videos and overlay metadata from the frontend, processes them asynchronously, and returns downloadable rendered videos.
 
@@ -23,24 +23,24 @@ app/
 ## Features
 
 ### Core Functionality
-- ✅ Async video processing with FFmpeg
-- ✅ Text overlay with customizable positioning and timing
-- ✅ Real-time progress tracking
-- ✅ Job queue management with concurrency limits
+- Async video processing with FFmpeg
+- Text overlay with customizable positioning and timing
+- Real-time progress tracking
+- Job queue management with concurrency limits
 
 ### Security
-- ✅ File type and size validation
-- ✅ Filename sanitization (prevents path traversal)
-- ✅ MIME type verification
-- ✅ Input validation with Pydantic
+- File type and size validation
+- Filename sanitization (prevents path traversal)
+- MIME type verification
+- Input validation with Pydantic
 
 ### Production Ready
-- ✅ Modular, testable architecture
-- ✅ Structured error handling and logging
-- ✅ CORS configuration
-- ✅ Automatic cleanup of old jobs
-- ✅ Optional Redis support for scalability
-- ✅ Graceful shutdown handling
+- Modular, testable architecture
+- Structured error handling and logging
+- CORS configuration
+- Automatic cleanup of old jobs
+- Optional Redis support for scalability
+- Graceful shutdown handling
 
 ## Installation
 
@@ -267,6 +267,3 @@ which ffmpeg  # Should return path
 ```bash
 chmod 755 uploads results
 ```
-
-`
-
