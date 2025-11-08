@@ -103,6 +103,7 @@ class FFmpegHelper:
                 # Extract properties with defaults
                 x = overlay.x
                 y = overlay.y
+                logger.info(f"Processing text overlay: '{text[:30]}...' at position ({x}, {y})")
                 font_size = overlay.fontSize or 24
                 font_color = overlay.fontColor or "white"
                 opacity = overlay.opacity if overlay.opacity is not None else 1.0
@@ -138,8 +139,7 @@ class FFmpegHelper:
 
                 # Add rotation if needed (in radians)
                 if rotation != 0:
-                    # FFmpeg rotation needs to be applied differently
-                    # We'll apply it after overlay in a separate step
+                
                     pass
 
                 filter_parts.append(f"enable='{enable}'")
@@ -157,6 +157,7 @@ class FFmpegHelper:
                 # Extract properties
                 x = overlay.x
                 y = overlay.y
+                logger.info(f"Processing image overlay at position ({x}, {y})")
                 width = overlay.width or 200
                 height = overlay.height or 100
                 opacity = overlay.opacity if overlay.opacity is not None else 1.0
@@ -206,6 +207,7 @@ class FFmpegHelper:
                 # Extract properties
                 x = overlay.x
                 y = overlay.y
+                logger.info(f"Processing video overlay at position ({x}, {y})")
                 width = overlay.width or 300
                 height = overlay.height or 200
                 opacity = overlay.opacity if overlay.opacity is not None else 1.0
@@ -219,13 +221,7 @@ class FFmpegHelper:
                 actual_width = int(width * scale_factor)
                 actual_height = int(height * scale_factor)
 
-                # Build filter for video overlay
-                # 1. Trim video overlay to match duration
-                # 2. Loop if needed
-                # 3. Scale to size
-                # 4. Apply opacity
-                # 5. Overlay on main video with timing
-
+                # Build video filter chain
                 video_filters = f"[{input_index}:v]"
 
                 # Trim to duration (this prevents "shortest" issue!)
@@ -247,7 +243,6 @@ class FFmpegHelper:
                 filters.append(video_filters)
 
                 # Overlay with timing - use enable to show only during start_time to end_time
-                # The overlay video itself is trimmed to the duration, we position it in time
                 enable = f"between(t,{start_time},{end_time})"
                 overlay_filter = f"{current_stream}[clip{filter_index}]overlay={x}:{y}:enable='{enable}'[v{filter_index}]"
                 filters.append(overlay_filter)
