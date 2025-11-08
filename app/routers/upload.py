@@ -31,38 +31,40 @@ async def upload_video(request: Request):
         # Parse multipart form data
         form_data = await request.form()
 
-        # Note: Log all form fields
+        # Log all form fields for debugging
         print(f"DEBUG: Form data keys: {list(form_data.keys())}")
         for key in form_data.keys():
             value = form_data.get(key)
-            print(f"DEBUG: Key '{key}' -> Type: {type(value)}, Value preview: {str(value)[:100]}")
+            if isinstance(value, UploadFile):
+                print(f"DEBUG: Key '{key}' -> UploadFile: {value.filename}")
+            else:
+                print(f"DEBUG: Key '{key}' -> Type: {type(value)}, Value preview: {str(value)[:100]}")
 
         # Extract main video file
         video = form_data.get("video")
-        print(f"DEBUG: Video object: {video}, Type: {type(video)}, isinstance check: {isinstance(video, UploadFile)}")
         if not video or not isinstance(video, UploadFile):
             raise HTTPException(status_code=400, detail="Video file is required")
 
         # Validate video file
-        print(f"DEBUG: Starting video validation...")
-        try:
-            await FileValidator.validate_video(video)
-            print(f"DEBUG: Video validation passed")
-        except Exception as e:
-            print(f"DEBUG: Video validation failed: {e}")
-            raise
+        await FileValidator.validate_video(video)
+        print(f"DEBUG: Video validation passed: {video.filename}")
 
         # Extract and parse metadata
         metadata_str = form_data.get("metadata")
-        print(f"DEBUG: Metadata string: {metadata_str[:200] if metadata_str else 'None'}")
         if not metadata_str:
             raise HTTPException(status_code=400, detail="Metadata is required")
 
         try:
             metadata_dict = json.loads(metadata_str)
-            print(f"DEBUG: Metadata parsed successfully: {metadata_dict}")
+            print(f"DEBUG: Metadata parsed successfully")
+            print(f"DEBUG: Number of overlays: {len(metadata_dict.get('overlays', []))}")
+
             overlay_data = OverlayMetadata(**metadata_dict)
-            print(f"DEBUG: OverlayMetadata object created successfully")
+
+            # Log each overlay details
+            for i, overlay in enumerate(overlay_data.overlays):
+                print(f"DEBUG: Overlay {i}: type={overlay.type}, content={overlay.content}")
+
         except json.JSONDecodeError as e:
             print(f"DEBUG: JSON decode error: {e}")
             raise HTTPException(status_code=400, detail="Invalid JSON in metadata")
@@ -71,12 +73,9 @@ async def upload_video(request: Request):
             raise HTTPException(status_code=400, detail=f"Invalid metadata: {str(e)}")
 
         # Validate overlay content
-        print(f"DEBUG: Validating {len(overlay_data.overlays)} overlays...")
         for i, overlay in enumerate(overlay_data.overlays):
-            print(f"DEBUG: Validating overlay {i}: type={overlay.type}, content={overlay.content[:50] if overlay.content else 'None'}")
             try:
                 FileValidator.validate_overlay_content(overlay.type, overlay.content)
-                print(f"DEBUG: Overlay {i} validation passed")
             except Exception as e:
                 print(f"DEBUG: Overlay {i} validation failed: {e}")
                 raise
@@ -92,16 +91,29 @@ async def upload_video(request: Request):
             content = await video.read()
             f.write(content)
 
+        print(f"DEBUG: Saved main video to: {video_path}")
+
         # Dictionary to store overlay file paths
+        # Key: original content string from overlay (URI or filename)
+        # Value: path to saved file
         overlay_files = {}
 
-        # Dictionary to map original filename to sanitized filename
-        filename_mapping = {}
+        # Track uploaded files by their form field key (overlay_file_N)
+        # The N corresponds to the overlay's index in the overlays array
+        uploaded_files_by_index = {}
 
         # Process overlay files (overlay_file_0, overlay_file_1, etc.)
         for key, value in form_data.items():
             if key.startswith("overlay_file_") and isinstance(value, UploadFile):
+                # Extract the index from the form field name (overlay_file_N -> N)
+                try:
+                    file_index = int(key.replace("overlay_file_", ""))
+                except ValueError:
+                    print(f"WARNING: Could not extract index from form field '{key}'")
+                    continue
+
                 original_filename = value.filename
+
                 # Save overlay file
                 safe_overlay_filename = FileValidator._sanitize_filename(original_filename)
                 overlay_file_path = Path(settings.UPLOAD_DIR) / f"{job_id}_{safe_overlay_filename}"
@@ -110,13 +122,27 @@ async def upload_video(request: Request):
                     overlay_content = await value.read()
                     f.write(overlay_content)
 
-                # Map both original and sanitized filenames to the saved path
-                
-                overlay_files[safe_overlay_filename] = str(overlay_file_path)
-                overlay_files[original_filename] = str(overlay_file_path)
-                filename_mapping[original_filename] = safe_overlay_filename
+                # Store the mapping by index
+                uploaded_files_by_index[file_index] = str(overlay_file_path)
 
-                print(f"DEBUG: Saved overlay file - original: '{original_filename}', sanitized: '{safe_overlay_filename}', path: {overlay_file_path}")
+                print(f"DEBUG: Saved overlay file at index {file_index}: '{original_filename}' -> {overlay_file_path}")
+
+        print(f"DEBUG: Uploaded files by index: {uploaded_files_by_index}")
+
+        # Now map overlay content URIs to saved file paths using the index
+        for i, overlay in enumerate(overlay_data.overlays):
+            if overlay.type in ["image", "video"]:
+                print(f"DEBUG: Processing overlay {i} - type={overlay.type}, content='{overlay.content}'")
+
+                # Check if we have an uploaded file for this index
+                if i in uploaded_files_by_index:
+                    overlay_files[overlay.content] = uploaded_files_by_index[i]
+                    print(f"DEBUG: Overlay {i} - Mapped content '{overlay.content}' to file '{uploaded_files_by_index[i]}'")
+                else:
+                    print(f"WARNING: Overlay {i} - No uploaded file found for index {i}")
+                    print(f"WARNING: Available indices: {list(uploaded_files_by_index.keys())}")
+
+        print(f"DEBUG: Final overlay_files mapping: {overlay_files}")
 
         # Create job
         await job_manager.create_job(job_id, str(video_path))
@@ -134,4 +160,7 @@ async def upload_video(request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"ERROR: Upload failed with exception: {e}")
+        print(f"ERROR: Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
